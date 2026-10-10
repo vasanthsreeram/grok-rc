@@ -22,7 +22,7 @@ description: Mirror the current Grok Build session to the Claude mobile app thro
 Run this from inside the Grok session you want to mirror:
 
 ```bash
-npx -y grok-rc start
+npx -y github:vasanthsreeram/grok-rc start
 ```
 
 It reads `GROK_SESSION_ID` and finds the Grok tmux pane by itself. Optional flags:
@@ -43,9 +43,9 @@ Then tell the user to open the Claude app, go to Code, and open `Grok · <title>
 ## Manage
 
 ```bash
-npx -y grok-rc status             # list running relays
-npx -y grok-rc stop               # stop the relay for this session
-npx -y grok-rc stop --all
+npx -y github:vasanthsreeram/grok-rc status             # list running relays
+npx -y github:vasanthsreeram/grok-rc stop               # stop the relay for this session
+npx -y github:vasanthsreeram/grok-rc stop --all
 tmux -L grokrc attach -t rc-<first 8 chars of session id>   # watch the relay
 ```
 

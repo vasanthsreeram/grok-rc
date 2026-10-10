@@ -7,7 +7,7 @@ Mirror a [Grok Build](https://x.ai) session to the **Claude mobile app** through
 - Reply from the Claude app, and the text is typed into the Grok terminal.
 
 ```bash
-npx -y grok-rc start
+npx -y github:vasanthsreeram/grok-rc start
 ```
 
 ## Requirements
@@ -22,7 +22,7 @@ npx -y grok-rc start
 From inside the Grok session you want on your phone, run:
 
 ```bash
-npx -y grok-rc start --name "my task"
+npx -y github:vasanthsreeram/grok-rc start --name "my task"
 ```
 
 Then open the Claude app → **Code** → **Grok · my task**.
@@ -39,7 +39,7 @@ Then open the Claude app → **Code** → **Grok · my task**.
 ```bash
 npx skills add vasanthsreeram/grok-rc
 # or
-npx -y grok-rc install-skill
+npx -y github:vasanthsreeram/grok-rc install-skill
 ```
 
 After that, tell Grok "send this session to my phone" or run `/grok-rc`.
