@@ -1,0 +1,37 @@
+{
+  "name": "grok-rc",
+  "version": "0.1.0",
+  "description": "Mirror a Grok Build session to the Claude mobile app through Claude Code Remote Control: chat, push notifications, and replies from your phone.",
+  "bin": {
+    "grok-rc": "bin/grok-rc.js"
+  },
+  "files": [
+    "bin",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "keywords": [
+    "grok",
+    "grok-build",
+    "claude-code",
+    "remote-control",
+    "rc",
+    "push-notifications",
+    "agent-skill",
+    "tmux"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vasanthsreeram/grok-rc.git"
+  },
+  "homepage": "https://github.com/vasanthsreeram/grok-rc#readme",
+  "license": "MIT"
+}
