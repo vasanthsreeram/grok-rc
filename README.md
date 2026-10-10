@@ -64,7 +64,7 @@ Grok TUI (tmux pane) ──writes──▶ ~/.grok/sessions/.../updates.jsonl
 
 ## Limits
 
-- Each mirrored message is one short turn on the relay model (Haiku by default), so it uses a small amount of your Claude usage.
+- Phone messages are blocked by a hook before they reach the relay model, so they use no Claude usage. Each Grok message mirrored to the phone is one short turn on the relay model (Haiku by default).
 - Messages over 6,000 characters are cut in the mirror. The full text stays in the terminal.
 - Grok's permission prompts are not mirrored. To drive Grok from the phone, run it in a mode that does not stop for approval.
 - Grok Build and Claude Code are products of xAI and Anthropic. This project is not affiliated with either.

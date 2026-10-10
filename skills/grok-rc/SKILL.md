@@ -56,6 +56,6 @@ tmux -L grokrc attach -t rc-<first 8 chars of session id>   # watch the relay
 
 ## Limits
 
-- Each mirrored message is one short turn on the relay's model, so it uses a little Claude usage.
+- Messages you send from the phone are blocked by a hook before they reach the relay model, so they use no Claude usage. Each Grok message mirrored to the phone is one short turn on the relay model.
 - Text longer than 6,000 characters is cut in the mirror. The full text stays in the terminal.
 - Tool calls are counted in the summary at the end of each turn. Grok's permission prompts are not mirrored, so run Grok in a mode that does not stop for approval if you plan to drive it from the phone.

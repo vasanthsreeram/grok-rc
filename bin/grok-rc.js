@@ -237,12 +237,8 @@ function cmdHook() {
     const fwd = JSON.parse(fs.readFileSync(fwdFile, 'utf8')).slice(-20);
     fwd.push(text.trim());
     fs.writeFileSync(fwdFile, JSON.stringify(fwd));
-    process.stdout.write(JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: 'UserPromptSubmit',
-        additionalContext: `This message was forwarded to the Grok agent. Reply with exactly: ${ACK}`,
-      },
-    }));
+    // Block the prompt so the relay model never runs: no Claude usage for phone messages.
+    process.stdout.write(JSON.stringify({ decision: 'block', reason: ACK }));
   } catch (e) {
     fs.appendFileSync(path.join(dir, 'hook.log'), `${new Date().toISOString()} ${e.message}\n`);
   }
@@ -290,6 +286,9 @@ async function cmdWatch() {
         const busy = /esc to interrupt/i.test(screen.split('\n').slice(-8).join('\n'));
         if (!busy) {
           const msg = queue.shift();
+          // A blocked phone prompt is put back in Claude's input box; clear it first.
+          relay(['send-keys', '-t', claudePane, 'C-u']);
+          await sleep(200);
           pasteInto(['-L', RELAY_SOCKET], claudePane, msg);
           await sleep(400);
           submit(['-L', RELAY_SOCKET], claudePane);
