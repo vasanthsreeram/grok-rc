@@ -19,8 +19,8 @@ const MAX_ECHO = 6000;
 const SYSTEM_PROMPT = [
   'You are a display relay between the user and a Grok Build coding agent that runs in a terminal.',
   `Messages that start with ${TAG} come from the Grok agent, not from the user.`,
-  `- "${TAG} ECHO": reply with everything after the first line, exactly verbatim. Add nothing. Use no tools.`,
-  `- "${TAG} DONE": the second line starts with "PUSH:". First call the PushNotification tool once with the text after "PUSH:" as the message (load it with ToolSearch if needed). Then reply with everything after the PUSH line, exactly verbatim.`,
+  `- "${TAG} PUSH" followed by a line of text: call the PushNotification tool once with that text as the message (load it with ToolSearch if needed). Then reply with only: ${ACK}`,
+  'Grok messages are shown to the user by a hook, so you do not need to repeat them.',
   'Every other message was typed by the user. It has already been forwarded to the Grok agent automatically, and Grok\'s answer will arrive as a later message.',
   `For those, reply with exactly: ${ACK}`,
   'Never run commands, read files, or use any tool other than ToolSearch and PushNotification.',
@@ -166,7 +166,8 @@ async function cmdStart(opts) {
     },
   };
   fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify(settings, null, 2));
-  fs.writeFileSync(path.join(dir, 'target.json'), JSON.stringify({ sid, updates, ...target, title }, null, 2));
+  const push = Boolean(opts.push);
+  fs.writeFileSync(path.join(dir, 'target.json'), JSON.stringify({ sid, updates, ...target, title, push }, null, 2));
   fs.writeFileSync(path.join(dir, 'forwarded.json'), '[]');
   fs.rmSync(path.join(dir, 'offset'), { force: true });
 
@@ -188,6 +189,7 @@ async function cmdStart(opts) {
   console.log(`grok-rc: relay "${name}" started for session ${sid}`);
   console.log(`  Grok pane : ${target.pane} (${path.basename(target.socket)})`);
   console.log(`  Phone     : open the Claude app → Code → "Grok · ${title}"`);
+  console.log(`  Push      : ${push ? 'on (one tiny Claude turn per Grok reply)' : 'off (free; add --push for phone alerts)'}`);
   console.log(`  Inspect   : tmux -L ${RELAY_SOCKET} attach -t ${name}`);
   console.log(`  Stop      : grok-rc stop --session ${sid}`);
 }
@@ -221,6 +223,15 @@ function cmdHook() {
   try { input = fs.readFileSync(0, 'utf8'); } catch {}
   let prompt = '';
   try { prompt = JSON.parse(input).prompt || ''; } catch {}
+  // "⟦grok⟧ <n>" from the watcher: show message n by blocking the prompt.
+  // The block notice syncs to the Claude app, and no model turn runs (free).
+  const shown = prompt.match(new RegExp(`${TAG} (\\d+)\\s*$`));
+  if (shown && process.env.GROKRC_DIR) {
+    let body = '';
+    try { body = fs.readFileSync(path.join(process.env.GROKRC_DIR, 'msgs', `${shown[1]}.md`), 'utf8'); } catch {}
+    process.stdout.write(JSON.stringify({ decision: 'block', reason: body || '(message unavailable)' }));
+    return;
+  }
   // Claude wraps long pastes in <pasted_content>, so the tag can appear after a prefix.
   if (!prompt || prompt.includes(TAG) || prompt.trimStart().startsWith('/')) return;
   // "@grok /model grok-4.6" sends a slash command to Grok (a bare "/" goes to Claude).
@@ -268,12 +279,18 @@ async function cmdWatch() {
   }
 
   const queue = [];
+  const msgDir = path.join(dir, 'msgs');
+  fs.mkdirSync(msgDir, { recursive: true });
+  let seq = fs.readdirSync(msgDir).length;
   const enqueue = (kind, body, push) => {
     body = body.trim();
     if (!body) return;
     if (body.length > MAX_ECHO) body = `${body.slice(0, MAX_ECHO)}\n… [truncated, ${body.length - MAX_ECHO} more chars in the terminal]`;
-    const head = kind === 'DONE' ? `${TAG} DONE\nPUSH: ${push}` : `${TAG} ECHO`;
-    queue.push(`${head}\n${body}`);
+    const n = ++seq;
+    fs.writeFileSync(path.join(msgDir, `${n}.md`), body);
+    queue.push(`${TAG} ${n}`);
+    // Optional push: the only path that runs a (tiny) model turn.
+    if (kind === 'DONE' && t.push) queue.push(`${TAG} PUSH\n${push}`);
   };
 
   // Send one queued message at a time, only when Claude is idle at its prompt.
@@ -287,7 +304,8 @@ async function cmdWatch() {
         if (!busy) {
           const msg = queue.shift();
           // A blocked phone prompt is put back in Claude's input box; clear it first.
-          relay(['send-keys', '-t', claudePane, 'C-u']);
+          // Ctrl+U clears one line, so press it enough times for a multi-line leftover.
+          for (let k = 0; k < 40; k++) relay(['send-keys', '-t', claudePane, 'C-u']);
           await sleep(200);
           pasteInto(['-L', RELAY_SOCKET], claudePane, msg);
           await sleep(400);
@@ -390,7 +408,7 @@ function help() {
   console.log(`grok-rc — mirror a Grok Build session to the Claude app (Claude Code Remote Control)
 
 Usage:
-  grok-rc start [--session <id>] [--pane %N] [--name <title>] [--model haiku]
+  grok-rc start [--session <id>] [--pane %N] [--name <title>] [--push] [--model haiku]
   grok-rc stop [--session <id> | --all]
   grok-rc status
   grok-rc install-skill     copy the /grok-rc skill into ~/.grok/skills and ~/.claude/skills

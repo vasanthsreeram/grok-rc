@@ -1,6 +1,6 @@
 {
   "name": "grok-rc",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Mirror a Grok Build session to the Claude mobile app through Claude Code Remote Control: chat, push notifications, and replies from your phone.",
   "bin": {
     "grok-rc": "bin/grok-rc.js"

@@ -29,7 +29,7 @@ Then open the Claude app → **Code** → **Grok · my task**.
 
 | Command | What it does |
 |---|---|
-| `grok-rc start [--name t] [--pane %N] [--session id] [--model haiku]` | Start a relay for the current (or given) Grok session |
+| `grok-rc start [--name t] [--pane %N] [--session id] [--push] [--model haiku]` | Start a relay for the current (or given) Grok session |
 | `grok-rc status` | List running relays |
 | `grok-rc stop [--session id \| --all]` | Stop relays |
 | `grok-rc install-skill` | Install the `/grok-rc` skill into `~/.grok/skills` and `~/.claude/skills` |
@@ -47,7 +47,7 @@ After that, tell Grok "send this session to my phone" or run `/grok-rc`.
 ## Models
 
 - **Grok's model:** from the Claude app, send `@grok /model grok-4.6` (any Grok `/model` argument). The `@grok` prefix forwards a slash command to Grok. A message that starts with a bare `/` goes to the Claude relay.
-- **Relay model:** the relay only echoes text, so a small model is enough. The default is `haiku`. Pick another with `grok-rc start --model sonnet` (any `claude --model` value), or set `GROK_RC_MODEL` in your environment.
+- **Relay model:** the relay model runs only for `--push` turns, so a small model is enough. The default is `haiku`. Pick another with `grok-rc start --model sonnet` (any `claude --model` value), or set `GROK_RC_MODEL` in your environment.
 
 ## How it works
 
@@ -59,12 +59,13 @@ Grok TUI (tmux pane) ──writes──▶ ~/.grok/sessions/.../updates.jsonl
 ```
 
 1. grok-rc starts a hidden Claude Code session with Remote Control on, in its own tmux server (`tmux -L grokrc`).
-2. A watcher tails the Grok session log and posts each new message into that relay. The relay echoes it verbatim. At the end of each turn it calls Claude Code's built-in `PushNotification` tool, which pushes to your phone while Remote Control is connected.
+2. A watcher tails the Grok session log, saves each new message to a file, and submits a short ID like `⟦grok⟧ 12` to the relay. A `UserPromptSubmit` hook blocks that prompt and puts the saved text in the block notice. Remote Control syncs the notice to the Claude app, and no model runs. With `--push`, the relay also gets one tiny turn per Grok reply to call Claude Code's `PushNotification` tool.
 3. A `UserPromptSubmit` hook catches what you type in the Claude app and pastes it into the Grok pane.
 
 ## Limits
 
-- Phone messages are blocked by a hook before they reach the relay model, so they use no Claude usage. Each Grok message mirrored to the phone is one short turn on the relay model (Haiku by default).
+- Free by default: both directions run through a Claude Code hook that blocks the prompt, so no model turn runs and no Claude usage is spent. Grok messages appear in the Claude app as hook notices.
+- `--push` adds a phone push when each Grok turn finishes. Only the model can send a push, so that costs one tiny relay turn per Grok reply.
 - Messages over 6,000 characters are cut in the mirror. The full text stays in the terminal.
 - Grok's permission prompts are not mirrored. To drive Grok from the phone, run it in a mode that does not stop for approval.
 - Grok Build and Claude Code are products of xAI and Anthropic. This project is not affiliated with either.
