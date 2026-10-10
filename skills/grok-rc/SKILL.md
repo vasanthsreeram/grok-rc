@@ -34,6 +34,11 @@ It reads `GROK_SESSION_ID` and finds the Grok tmux pane by itself. Optional flag
 
 Then tell the user to open the Claude app, go to Code, and open `Grok · <title>`.
 
+## Models
+
+- **Grok's model:** from the Claude app, send `@grok /model grok-4.6` (any Grok `/model` argument). The `@grok` prefix forwards a slash command to Grok. A message that starts with a bare `/` goes to the Claude relay.
+- **Relay model:** the relay only echoes text, so a small model is enough. The default is `haiku`. Pick another with `grok-rc start --model sonnet` (any `claude --model` value), or set `GROK_RC_MODEL` in your environment.
+
 ## Manage
 
 ```bash

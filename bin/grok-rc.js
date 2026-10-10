@@ -10,6 +10,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const TAG = '⟦grok⟧';
+const ACK = '✓';
 const RELAY_SOCKET = 'grokrc';
 const HOME = path.join(os.homedir(), '.grok-rc');
 const SELF = path.resolve(__filename);
@@ -20,8 +21,8 @@ const SYSTEM_PROMPT = [
   `Messages that start with ${TAG} come from the Grok agent, not from the user.`,
   `- "${TAG} ECHO": reply with everything after the first line, exactly verbatim. Add nothing. Use no tools.`,
   `- "${TAG} DONE": the second line starts with "PUSH:". First call the PushNotification tool once with the text after "PUSH:" as the message (load it with ToolSearch if needed). Then reply with everything after the PUSH line, exactly verbatim.`,
-  'Every other message was typed by the user. It has already been forwarded to the Grok agent automatically.',
-  'For those, reply with exactly: ↪ sent to Grok',
+  'Every other message was typed by the user. It has already been forwarded to the Grok agent automatically, and Grok\'s answer will arrive as a later message.',
+  `For those, reply with exactly: ${ACK}`,
   'Never run commands, read files, or use any tool other than ToolSearch and PushNotification.',
 ].join('\n');
 
@@ -167,6 +168,7 @@ async function cmdStart(opts) {
   fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify(settings, null, 2));
   fs.writeFileSync(path.join(dir, 'target.json'), JSON.stringify({ sid, updates, ...target, title }, null, 2));
   fs.writeFileSync(path.join(dir, 'forwarded.json'), '[]');
+  fs.rmSync(path.join(dir, 'offset'), { force: true });
 
   const env = {
     GROKRC_SID: sid,
@@ -174,7 +176,7 @@ async function cmdStart(opts) {
     CLAUDE_CODE_DISABLE_NOTIFICATION_PRESENCE_CHECK: '1',
   };
   const envArgs = Object.entries(env).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
-  const model = opts.model || 'haiku';
+  const model = opts.model || process.env.GROK_RC_MODEL || 'haiku';
 
   relay(['new-session', '-d', '-s', name, '-n', 'claude', '-x', '200', '-y', '50', '-c', dir, ...envArgs,
     'claude', '--rc', `Grok · ${title}`, '--model', model,
@@ -221,18 +223,26 @@ function cmdHook() {
   try { prompt = JSON.parse(input).prompt || ''; } catch {}
   // Claude wraps long pastes in <pasted_content>, so the tag can appear after a prefix.
   if (!prompt || prompt.includes(TAG) || prompt.trimStart().startsWith('/')) return;
+  // "@grok /model grok-4.6" sends a slash command to Grok (a bare "/" goes to Claude).
+  const text = prompt.replace(/^\s*@grok\s+/i, '');
   const dir = process.env.GROKRC_DIR;
   if (!dir) return;
   try {
     const t = JSON.parse(fs.readFileSync(path.join(dir, 'target.json'), 'utf8'));
     const sock = ['-S', t.socket];
-    pasteInto(sock, t.pane, prompt);
+    pasteInto(sock, t.pane, text);
     spawnSync('sleep', ['0.3']);
     submit(sock, t.pane);
     const fwdFile = path.join(dir, 'forwarded.json');
     const fwd = JSON.parse(fs.readFileSync(fwdFile, 'utf8')).slice(-20);
-    fwd.push(prompt.trim());
+    fwd.push(text.trim());
     fs.writeFileSync(fwdFile, JSON.stringify(fwd));
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'UserPromptSubmit',
+        additionalContext: `This message was forwarded to the Grok agent. Reply with exactly: ${ACK}`,
+      },
+    }));
   } catch (e) {
     fs.appendFileSync(path.join(dir, 'hook.log'), `${new Date().toISOString()} ${e.message}\n`);
   }
@@ -249,8 +259,9 @@ async function cmdWatch() {
   // Wait for Remote Control to come up.
   for (let i = 0; i < 90; i++) {
     let screen = '';
-    try { screen = relay(['capture-pane', '-p', '-t', claudePane]); } catch {}
-    if (/remote-control is active/i.test(screen)) break;
+    try { screen = relay(['capture-pane', '-p', '-S', '-2000', '-t', claudePane]); } catch {}
+    // Claude redraws in place, so the RC banner can scroll away; the mode footer means ready.
+    if (/remote-control is active|auto mode on|shift\+tab to cycle/i.test(screen)) break;
     // The relay runs in its own state folder under ~/.grok-rc; trusting it is safe.
     if (/Yes, I trust this folder/.test(screen)) {
       relay(['send-keys', '-t', claudePane, 'Down']);
@@ -275,7 +286,8 @@ async function cmdWatch() {
       if (queue.length) {
         let screen = '';
         try { screen = relay(['capture-pane', '-p', '-t', claudePane]); } catch { process.exit(0); }
-        const busy = /esc to interrupt|Thinking|Cogitat|✻ [A-Z][a-z]+…/.test(screen.split('\n').slice(-12).join('\n'));
+        // Only the live-turn footer means busy; "✻ Cogitated for 1s" is a finished turn.
+        const busy = /esc to interrupt/i.test(screen.split('\n').slice(-8).join('\n'));
         if (!busy) {
           const msg = queue.shift();
           pasteInto(['-L', RELAY_SOCKET], claudePane, msg);
@@ -290,13 +302,15 @@ async function cmdWatch() {
     }
   })();
 
-  enqueue('ECHO', `🔗 Connected to Grok Build session "${t.title}".\nMessages you send here are typed into the Grok terminal.`);
+  const offsetFile = path.join(dir, 'offset');
+  const resumed = fs.existsSync(offsetFile);
+  if (!resumed) enqueue('ECHO', `🔗 Connected to Grok Build session "${t.title}".\nMessages you send here are typed into the Grok terminal. Start a message with "@grok /model <name>" to switch Grok's model.`);
 
   const forwarded = () => {
     try { return JSON.parse(fs.readFileSync(path.join(dir, 'forwarded.json'), 'utf8')); } catch { return []; }
   };
 
-  let pos = fs.statSync(t.updates).size;
+  let pos = resumed ? Number(fs.readFileSync(offsetFile, 'utf8')) || 0 : fs.statSync(t.updates).size;
   let partial = '';
   let userText = '';
   let agentText = '';
@@ -353,6 +367,7 @@ async function cmdWatch() {
       fs.readSync(fd, buf, 0, buf.length, pos);
       fs.closeSync(fd);
       pos = size;
+      fs.writeFileSync(offsetFile, String(pos));
       const lines = (partial + buf.toString('utf8')).split('\n');
       partial = lines.pop();
       for (const line of lines) {
