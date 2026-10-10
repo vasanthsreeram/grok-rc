@@ -219,7 +219,8 @@ function cmdHook() {
   try { input = fs.readFileSync(0, 'utf8'); } catch {}
   let prompt = '';
   try { prompt = JSON.parse(input).prompt || ''; } catch {}
-  if (!prompt || prompt.startsWith(TAG) || prompt.startsWith('/')) return;
+  // Claude wraps long pastes in <pasted_content>, so the tag can appear after a prefix.
+  if (!prompt || prompt.includes(TAG) || prompt.trimStart().startsWith('/')) return;
   const dir = process.env.GROKRC_DIR;
   if (!dir) return;
   try {
