@@ -304,7 +304,7 @@ async function cmdWatch() {
 
   const offsetFile = path.join(dir, 'offset');
   const resumed = fs.existsSync(offsetFile);
-  if (!resumed) enqueue('ECHO', `🔗 Connected to Grok Build session "${t.title}".\nMessages you send here are typed into the Grok terminal. Start a message with "@grok /model <name>" to switch Grok's model.`);
+  if (!resumed) enqueue('ECHO', `Connected to Grok Build session "${t.title}". Messages you send here go to Grok.`);
 
   const forwarded = () => {
     try { return JSON.parse(fs.readFileSync(path.join(dir, 'forwarded.json'), 'utf8')); } catch { return []; }
@@ -323,7 +323,7 @@ async function cmdWatch() {
     if (!u) return;
     lastUser = u;
     if (forwarded().includes(u)) return; // came from the phone, already visible there
-    enqueue('ECHO', `🧑 (terminal) ${u}`);
+    enqueue('ECHO', u.split('\n').map((l) => `> ${l}`).join('\n'));
   };
   const flushAgent = () => {
     const a = agentText.trim();
@@ -345,13 +345,11 @@ async function cmdWatch() {
     } else if (kind === 'turn_completed') {
       const final = agentText.trim();
       agentText = '';
-      const n = tools.length;
       tools = [];
-      const stop = u.stop_reason && u.stop_reason !== 'end_turn' ? ` · ${u.stop_reason}` : '';
-      const footer = `\n\n— Grok finished${n ? ` · ${n} tool call${n === 1 ? '' : 's'}` : ''}${stop}`;
-      const firstLine = (final || u.agent_result || 'Turn finished').replace(/\s+/g, ' ');
-      const push = `Grok: ${firstLine}`.slice(0, 180);
-      enqueue('DONE', `${final || u.agent_result || '(no text reply)'}${footer}`, push);
+      const stopped = u.stop_reason && u.stop_reason !== 'end_turn' && u.stop_reason !== 'completed';
+      const body = final || u.agent_result || 'Done.';
+      const push = body.replace(/[*_`#>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 180);
+      enqueue('DONE', stopped ? `${body}\n\n_(stopped)_` : body, push);
       lastUser = '';
     }
   };
